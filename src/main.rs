@@ -1,8 +1,8 @@
 use std::{env, net::SocketAddr, sync::Arc};
 
 use chat::ChatImpl;
+use log::{error, info};
 use tokio::net::{TcpListener, TcpStream};
-use tracing::{Level, error, info};
 
 mod chat;
 
@@ -13,13 +13,11 @@ trait ServerImpl {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt()
-        .with_ansi(false)
-        .with_max_level(Level::TRACE)
-        .without_time()
-        .pretty()
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Debug)
+        .format_target(false)
+        .format_timestamp(None)
         .init();
-
     let listener = TcpListener::bind("0.0.0.0:8080")
         .await
         .unwrap_or_else(|e| panic!("Could not bind listener: {e}"));
@@ -49,7 +47,7 @@ async fn main() {
                 tokio::spawn(async move { server.handle_client(stream, addr).await });
             }
             Err(e) => {
-                error!(err = e.to_string(), "Could not accept connection");
+                error!("Could not accept connection: {e}");
             }
         }
     }

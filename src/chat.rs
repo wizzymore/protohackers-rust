@@ -1,12 +1,12 @@
 use std::{collections::HashMap, net::SocketAddr};
 
+use log::{error, info, trace};
 use regex::Regex;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::{TcpStream, tcp::OwnedWriteHalf},
     sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
 };
-use tracing::{error, info, instrument, trace};
 
 use crate::ServerImpl;
 
@@ -15,14 +15,13 @@ pub struct ChatImpl {
     tx: UnboundedSender<Packet>,
 }
 
-#[instrument("chat-server", skip_all)]
 async fn start_server(mut rx: UnboundedReceiver<Packet>) {
     info!("Started the chat server");
     let mut users = HashMap::new();
     while let Some(message) = rx.recv().await {
         match message {
             Packet::NewConnection(mut stream, addr) => {
-                info!(ip = addr.to_string(), "Received new connection");
+                info!("Received new connection ip={addr}");
                 let _ = stream.write_all(b"Please enter your username...\n").await;
                 users.insert(
                     addr,
@@ -76,11 +75,7 @@ async fn start_server(mut rx: UnboundedReceiver<Packet>) {
                                 .await;
                         }
 
-                        trace!(
-                            ip = addr.to_string(),
-                            username = trimmed.to_string(),
-                            "User set their username"
-                        );
+                        trace!("User set their username ip={addr} username={trimmed}",);
                         sender.username = trimmed.to_string();
                         (sender.username.as_str(), true)
                     } else {
@@ -92,22 +87,14 @@ async fn start_server(mut rx: UnboundedReceiver<Packet>) {
                 let message = if just_joined {
                     format!("* {} has entered the room\n", sender_username)
                 } else {
-                    trace!(
-                        ip = addr.to_string(),
-                        message = message.clone(),
-                        "User sent new message"
-                    );
+                    trace!("User sent new message ip={addr} message={message}");
                     format!("[{}] {}\n", sender_username, message)
                 };
 
                 for (target_addr, u) in users.iter_mut() {
                     if target_addr != &addr && !u.username.is_empty() {
                         if let Err(e) = u.stream.write_all(message.as_bytes()).await {
-                            error!(
-                                ip = addr.to_string(),
-                                err = e.to_string(),
-                                "Could not write to stream"
-                            );
+                            error!("Could not write to stream: {e} ip={addr}");
                             disconnected.push(*target_addr);
                         }
                     }
@@ -118,7 +105,7 @@ async fn start_server(mut rx: UnboundedReceiver<Packet>) {
                 }
             }
             Packet::RemoveConnection(addr) => {
-                info!(ip = addr.to_string(), "Client disconnected");
+                info!("Client disconnected ip={addr}");
                 let user = users.remove(&addr).unwrap();
                 if !user.username.is_empty() {
                     for (_, u) in users.iter_mut().filter(|(_, u)| !u.username.is_empty()) {
@@ -143,7 +130,6 @@ impl ServerImpl for ChatImpl {
         ChatImpl { tx }
     }
 
-    #[instrument("handle_client", skip_all)]
     async fn handle_client(&self, stream: TcpStream, addr: SocketAddr) {
         let (stream, write_stream) = stream.into_split();
 
@@ -161,16 +147,12 @@ impl ServerImpl for ChatImpl {
             match reader.read_line(&mut line).await {
                 Ok(n) => {
                     if n == 0 {
-                        info!(ip = addr.to_string(), "Connection closed");
+                        info!("Connection closed ip={addr}");
                         break;
                     }
                 }
                 Err(e) => {
-                    error!(
-                        ip = addr.to_string(),
-                        err = e.to_string(),
-                        "Could not read from stream"
-                    );
+                    error!("Could not read from stream: {e} ip={addr}");
                     break;
                 }
             };
@@ -179,11 +161,7 @@ impl ServerImpl for ChatImpl {
             line.truncate(line.trim_end().len());
 
             if let Err(e) = self.tx.send(Packet::NewMessage(addr, line.clone())) {
-                error!(
-                    ip = addr.to_string(),
-                    err = e.to_string(),
-                    "Could not write to channel"
-                );
+                error!("Could not write to channel: {e} ip={addr}");
                 break;
             }
         }
