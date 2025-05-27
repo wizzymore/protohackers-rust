@@ -14,6 +14,7 @@ trait ServerImpl {
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
+        .with_ansi(false)
         .with_max_level(Level::TRACE)
         .without_time()
         .pretty()
