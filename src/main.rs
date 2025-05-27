@@ -2,7 +2,7 @@ use std::{env, net::SocketAddr, sync::Arc};
 
 use chat::ChatImpl;
 use tokio::net::{TcpListener, TcpStream};
-use tracing::{Level, info};
+use tracing::{Level, error, info};
 
 mod chat;
 
@@ -49,7 +49,7 @@ async fn main() {
                 tokio::spawn(async move { server.handle_client(stream, addr).await });
             }
             Err(e) => {
-                eprintln!("Could not accept connection: {e}");
+                error!(err = e.to_string(), "Could not accept connection");
             }
         }
     }
