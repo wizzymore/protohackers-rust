@@ -19,11 +19,11 @@ async fn main() {
         .pretty()
         .init();
 
-    let listener = TcpListener::bind("localhost:8080")
+    let listener = TcpListener::bind("127.0.0.1:8080")
         .await
         .unwrap_or_else(|e| panic!("Could not bind listener: {e}"));
 
-    info!("🚀 Server listening on localhost:8080");
+    info!("🚀 Server listening on 127.0.0.1:8080");
 
     let mut args = env::args();
 
