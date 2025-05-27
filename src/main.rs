@@ -54,7 +54,8 @@ async fn start_server(mut rx: UnboundedReceiver<Message>) {
     let mut users = HashMap::new();
     while let Some(message) = rx.recv().await {
         match message {
-            Message::NewConnection(stream, addr) => {
+            Message::NewConnection(mut stream, addr) => {
+                let _ = stream.write_all(b"Please enter your username...\n").await;
                 users.insert(
                     addr,
                     User {
@@ -164,10 +165,8 @@ impl Drop for ConnectionGuard {
 }
 
 async fn handle_client(stream: TcpStream, addr: SocketAddr, tx: UnboundedSender<Message>) {
-    let (stream, mut write_stream) = stream.into_split();
+    let (stream, write_stream) = stream.into_split();
     println!("Received new connection from: {addr}");
-
-    let _ = write_stream.write(b"Please enter your username...\n").await;
 
     let _ = tx.send(Message::NewConnection(write_stream, addr));
 
