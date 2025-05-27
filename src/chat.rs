@@ -101,7 +101,7 @@ async fn start_server(mut rx: UnboundedReceiver<Packet>) {
                 };
 
                 for (target_addr, u) in users.iter_mut() {
-                    if target_addr != &addr {
+                    if target_addr != &addr && !u.username.is_empty() {
                         if let Err(e) = u.stream.write_all(message.as_bytes()).await {
                             error!(
                                 ip = addr.to_string(),
