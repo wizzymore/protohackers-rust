@@ -1,15 +1,10 @@
-use std::{env, net::SocketAddr, sync::Arc};
+use std::env;
 
-use chat::ChatImpl;
-use log::{error, info};
-use tokio::net::{TcpListener, TcpStream};
+use chat::run_chat;
+use unusual::run_unusual;
 
 mod chat;
-
-trait ServerImpl {
-    fn new() -> Self;
-    async fn handle_client(&self, stream: TcpStream, addr: SocketAddr);
-}
+mod unusual;
 
 #[tokio::main]
 async fn main() {
@@ -18,11 +13,6 @@ async fn main() {
         .format_target(false)
         .format_timestamp(None)
         .init();
-    let listener = TcpListener::bind("0.0.0.0:8080")
-        .await
-        .unwrap_or_else(|e| panic!("Could not bind listener: {e}"));
-
-    info!("🚀 Server listening on :8080");
 
     let mut args = env::args();
 
@@ -31,24 +21,11 @@ async fn main() {
         None => String::from("chat"),
     };
 
-    let server_impl = match command.as_str() {
-        "chat" => ChatImpl::new(),
+    match command.as_str() {
+        "chat" => run_chat().await,
+        "unusual" => run_unusual().await,
         _ => {
             panic!("Invalid server implementation specified: {command}");
         }
     };
-
-    let server_arc = Arc::new(server_impl);
-
-    loop {
-        match listener.accept().await {
-            Ok((stream, addr)) => {
-                let server = server_arc.clone();
-                tokio::spawn(async move { server.handle_client(stream, addr).await });
-            }
-            Err(e) => {
-                error!("Could not accept connection: {e}");
-            }
-        }
-    }
 }

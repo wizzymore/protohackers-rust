@@ -1,18 +1,61 @@
-use std::{collections::HashMap, net::SocketAddr};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use log::{error, info, trace};
 use regex::Regex;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::{TcpStream, tcp::OwnedWriteHalf},
+    net::{TcpListener, TcpStream, tcp::OwnedWriteHalf},
     sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
 };
 
-use crate::ServerImpl;
-
-#[derive(Clone)]
-pub struct ChatImpl {
+struct Chat {
     tx: UnboundedSender<Packet>,
+}
+
+impl Chat {
+    fn new() -> Self {
+        let (tx, rx) = unbounded_channel::<Packet>();
+
+        tokio::spawn(async move { start_server(rx).await });
+        Self { tx }
+    }
+
+    async fn handle_client(&self, stream: TcpStream, addr: SocketAddr) {
+        let (stream, write_stream) = stream.into_split();
+
+        let _ = self.tx.send(Packet::NewConnection(write_stream, addr));
+
+        let _guard = ConnectionGuard {
+            addr,
+            tx: self.tx.clone(),
+        };
+
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match reader.read_line(&mut line).await {
+                Ok(n) => {
+                    if n == 0 {
+                        info!("Connection closed ip={addr}");
+                        break;
+                    }
+                }
+                Err(e) => {
+                    error!("Could not read from stream: {e} ip={addr}");
+                    break;
+                }
+            };
+
+            // Remove the \n or \r from end
+            line.truncate(line.trim_end().len());
+
+            if let Err(e) = self.tx.send(Packet::NewMessage(addr, line.clone())) {
+                error!("Could not write to channel: {e} ip={addr}");
+                break;
+            }
+        }
+    }
 }
 
 async fn start_server(mut rx: UnboundedReceiver<Packet>) {
@@ -122,52 +165,6 @@ async fn start_server(mut rx: UnboundedReceiver<Packet>) {
     }
 }
 
-impl ServerImpl for ChatImpl {
-    fn new() -> Self {
-        let (tx, rx) = unbounded_channel::<Packet>();
-
-        tokio::spawn(async move { start_server(rx).await });
-        ChatImpl { tx }
-    }
-
-    async fn handle_client(&self, stream: TcpStream, addr: SocketAddr) {
-        let (stream, write_stream) = stream.into_split();
-
-        let _ = self.tx.send(Packet::NewConnection(write_stream, addr));
-
-        let _guard = ConnectionGuard {
-            addr,
-            tx: self.tx.clone(),
-        };
-
-        let mut reader = BufReader::new(stream);
-        let mut line = String::new();
-        loop {
-            line.clear();
-            match reader.read_line(&mut line).await {
-                Ok(n) => {
-                    if n == 0 {
-                        info!("Connection closed ip={addr}");
-                        break;
-                    }
-                }
-                Err(e) => {
-                    error!("Could not read from stream: {e} ip={addr}");
-                    break;
-                }
-            };
-
-            // Remove the \n or \r from end
-            line.truncate(line.trim_end().len());
-
-            if let Err(e) = self.tx.send(Packet::NewMessage(addr, line.clone())) {
-                error!("Could not write to channel: {e} ip={addr}");
-                break;
-            }
-        }
-    }
-}
-
 enum Packet {
     NewConnection(OwnedWriteHalf, SocketAddr),
     NewMessage(SocketAddr, String),
@@ -197,4 +194,28 @@ fn is_valid_username(username: &str) -> bool {
     }
 
     USERNAME_RE.is_match(username)
+}
+
+pub async fn run_chat() {
+    let listener = TcpListener::bind("0.0.0.0:8080")
+        .await
+        .unwrap_or_else(|e| panic!("Could not bind listener: {e}"));
+
+    info!("🚀 Server listening on :8080");
+
+    let chat = Arc::new(Chat::new());
+
+    loop {
+        match listener.accept().await {
+            Ok((stream, addr)) => {
+                let chat = chat.clone();
+                tokio::spawn(async move {
+                    chat.handle_client(stream, addr).await;
+                });
+            }
+            Err(e) => {
+                error!("Could not accept connection: {e}");
+            }
+        }
+    }
 }
