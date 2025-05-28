@@ -96,8 +96,6 @@ pub async fn run_unusual() {
                     continue;
                 };
 
-                let message = message.trim_end_matches(|c: char| matches!(c, '\n' | '\r'));
-
                 info!("Received the string `{message}`");
 
                 let _ = match message.split_once("=") {
