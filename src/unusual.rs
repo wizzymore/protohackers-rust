@@ -12,34 +12,40 @@ lazy_static! {
 
 async fn handle_client(socket: Arc<UdpSocket>, message: String, addr: SocketAddr) {
     match message.split_once("=") {
-        Some((key, value)) => match key {
-            "version" => {}
-            key => {
-                let mut data = DATA.write().await;
-                data.insert(key.to_string(), value.to_string());
-            }
-        },
-        None => match message.as_str() {
-            "version" => {
-                if socket.send_to(VERSION.as_bytes(), addr).await.is_err() {
-                    error!("Failed to reply to {addr} about key `{message}`");
+        Some((key, value)) => {
+            info!("Client {addr} sent a insert request for `{key}` of `{value}`");
+            match key {
+                "version" => {}
+                key => {
+                    let mut data = DATA.write().await;
+                    data.insert(key.to_string(), value.to_string());
                 }
             }
-            key => {
-                let data = DATA.read().await;
-                let Some(value) = data.get(key) else {
-                    info!("Client {addr} requested inexistent key `{key}`");
-                    return;
-                };
-                if socket
-                    .send_to(format!("{}\n", value).as_bytes(), addr)
-                    .await
-                    .is_err()
-                {
-                    error!("Failed to reply to {addr} about key `{message}`");
+        }
+        None => {
+            info!("Client {addr} sent a get request for `{message}`");
+            match message.as_str() {
+                "version" => {
+                    if socket.send_to(VERSION.as_bytes(), addr).await.is_err() {
+                        error!("Failed to reply to {addr} about key `{message}`");
+                    }
                 }
-            }
-        },
+                key => {
+                    let data = DATA.read().await;
+                    let Some(value) = data.get(key) else {
+                        info!("Client {addr} requested inexistent key `{key}`");
+                        return;
+                    };
+                    if socket
+                        .send_to(format!("{}\n", value).as_bytes(), addr)
+                        .await
+                        .is_err()
+                    {
+                        error!("Failed to reply to {addr} about key `{message}`");
+                    }
+                }
+            };
+        }
     }
 }
 
@@ -58,6 +64,8 @@ pub async fn run_unusual() {
                     error!("Client did not send valid utf8 message");
                     continue;
                 };
+
+                info!("Received the string `{message}`");
 
                 let socket = socket.clone();
                 tokio::spawn(async move { handle_client(socket, message, addr).await });
