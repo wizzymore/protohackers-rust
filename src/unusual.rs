@@ -54,11 +54,14 @@ async fn run_server(socket: Arc<UdpSocket>, mut rx: UnboundedReceiver<Message>) 
                                 reply.push('=');
                                 reply.push_str(value);
 
-                                if socket
-                                    .send_to(&reply.as_bytes()[0..1000], addr)
-                                    .await
-                                    .is_err()
-                                {
+                                let to_send;
+                                if reply.len() > 1000 {
+                                    to_send = reply[0..1000].as_bytes();
+                                } else {
+                                    to_send = reply.as_bytes();
+                                }
+
+                                if socket.send_to(to_send, addr).await.is_err() {
                                     error!("Failed to reply to {addr} about key `{key}`");
                                 }
                             }
