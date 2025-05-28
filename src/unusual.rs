@@ -37,7 +37,7 @@ async fn handle_client(socket: Arc<UdpSocket>, message: String, addr: SocketAddr
                         return;
                     };
                     if socket
-                        .send_to(format!("{}\n", value).as_bytes(), addr)
+                        .send_to(format!("{key}={value}\n").as_bytes(), addr)
                         .await
                         .is_err()
                     {
