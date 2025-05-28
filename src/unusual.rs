@@ -89,7 +89,7 @@ pub async fn run_unusual() {
                     continue;
                 };
 
-                let message = message.trim_end_matches(|c: char| c.is_ascii_whitespace());
+                let message = message.trim_end_matches(|c: char| matches!(c, '\n' | '\r'));
 
                 info!("Received the string `{message}`");
 
