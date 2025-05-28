@@ -10,7 +10,7 @@ use tokio::{
     },
 };
 
-const VERSION: &str = "Ken's Key-Value Store 1.0\n";
+const VERSION: &str = "Ken's Key-Value Store 1.0";
 
 lazy_static! {
     static ref DATA: RwLock<HashMap<String, String>> = RwLock::new(HashMap::new());
@@ -49,11 +49,10 @@ async fn run_server(socket: Arc<UdpSocket>, mut rx: UnboundedReceiver<Message>) 
                                     continue;
                                 };
 
-                                let mut reply = String::with_capacity(key.len() + value.len() + 2); // `=` + `\n`
+                                let mut reply = String::with_capacity(key.len() + value.len() + 1); // both strings + `=`
                                 reply.push_str(key);
                                 reply.push('=');
                                 reply.push_str(value);
-                                reply.push('\n');
 
                                 if socket.send_to(reply.as_bytes(), addr).await.is_err() {
                                     error!("Failed to reply to {addr} about key `{key}`");
