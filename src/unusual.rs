@@ -10,7 +10,7 @@ use tokio::{
     },
 };
 
-const VERSION: &str = "Ken's Key-Value Store 1.0";
+const VERSION: &str = "version=Ken's Key-Value Store 1.0";
 
 lazy_static! {
     static ref DATA: RwLock<HashMap<String, String>> = RwLock::new(HashMap::new());
