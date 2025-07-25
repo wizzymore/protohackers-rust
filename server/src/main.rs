@@ -1,9 +1,11 @@
 use std::env;
 
 use chat::run_chat;
+use speed::run_speed;
 use unusual::run_unusual;
 
 mod chat;
+mod speed;
 mod unusual;
 
 #[tokio::main]
@@ -24,6 +26,7 @@ async fn main() {
     match command.as_str() {
         "chat" => run_chat().await,
         "unusual" => run_unusual().await,
+        "speed" => run_speed().await,
         _ => {
             panic!("Invalid server implementation specified: {command}");
         }

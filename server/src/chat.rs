@@ -1,4 +1,4 @@
-use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr};
 
 use log::{error, info, trace};
 use regex::Regex;
@@ -8,52 +8,39 @@ use tokio::{
     sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
 };
 
-struct Chat {
-    tx: UnboundedSender<Packet>,
-}
+async fn handle_client(tx: UnboundedSender<Packet>, stream: TcpStream, addr: SocketAddr) {
+    let (stream, write_stream) = stream.into_split();
 
-impl Chat {
-    fn new() -> Self {
-        let (tx, rx) = unbounded_channel::<Packet>();
+    let _ = tx.send(Packet::NewConnection(write_stream, addr));
 
-        tokio::spawn(async move { start_server(rx).await });
-        Self { tx }
-    }
+    let _guard = ConnectionGuard {
+        addr,
+        tx: tx.clone(),
+    };
 
-    async fn handle_client(&self, stream: TcpStream, addr: SocketAddr) {
-        let (stream, write_stream) = stream.into_split();
-
-        let _ = self.tx.send(Packet::NewConnection(write_stream, addr));
-
-        let _guard = ConnectionGuard {
-            addr,
-            tx: self.tx.clone(),
-        };
-
-        let mut reader = BufReader::new(stream);
-        let mut line = String::new();
-        loop {
-            line.clear();
-            match reader.read_line(&mut line).await {
-                Ok(n) => {
-                    if n == 0 {
-                        info!("Connection closed ip={addr}");
-                        break;
-                    }
-                }
-                Err(e) => {
-                    error!("Could not read from stream: {e} ip={addr}");
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    loop {
+        line.clear();
+        match reader.read_line(&mut line).await {
+            Ok(n) => {
+                if n == 0 {
+                    info!("Connection closed ip={addr}");
                     break;
                 }
-            };
-
-            // Remove the \n or \r from end
-            line.truncate(line.trim_end().len());
-
-            if let Err(e) = self.tx.send(Packet::NewMessage(addr, line.clone())) {
-                error!("Could not write to channel: {e} ip={addr}");
+            }
+            Err(e) => {
+                error!("Could not read from stream: {e} ip={addr}");
                 break;
             }
+        };
+
+        // Remove the \n or \r from end
+        line.truncate(line.trim_end().len());
+
+        if let Err(e) = tx.send(Packet::NewMessage(addr, line.clone())) {
+            error!("Could not write to channel: {e} ip={addr}");
+            break;
         }
     }
 }
@@ -203,15 +190,14 @@ pub async fn run_chat() {
 
     info!("🚀 Server listening on :8080");
 
-    let chat = Arc::new(Chat::new());
+    let (tx, rx) = unbounded_channel::<Packet>();
+
+    tokio::spawn(start_server(rx));
 
     loop {
         match listener.accept().await {
             Ok((stream, addr)) => {
-                let chat = chat.clone();
-                tokio::spawn(async move {
-                    chat.handle_client(stream, addr).await;
-                });
+                tokio::spawn(handle_client(tx.clone(), stream, addr));
             }
             Err(e) => {
                 error!("Could not accept connection: {e}");
